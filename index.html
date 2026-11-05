@@ -1,0 +1,145 @@
+<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#1B2F4B"><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icons/icon-192.png"><title>ניהול משתמשים</title>
+<style>
+:root{--ink:#1B2F4B;--paper:#F4F1E8;--card:#fff;--line:#DDD6C2;--gold:#E7C469;--red:#B3361F;--mut:#55657C}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%}
+body{font:17px/1.5 system-ui,"Segoe UI",Arial,sans-serif;background:var(--paper);color:var(--ink);-webkit-tap-highlight-color:transparent}
+header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--ink);color:#fff}
+header h1{flex:1;margin:0;font-size:19px}
+button,input{font:inherit}
+button{min-height:46px;padding:0 16px;border-radius:12px;border:1.5px solid var(--line);background:#fff;color:var(--ink);font-weight:700;cursor:pointer}
+button.p{background:var(--ink);color:#fff;border-color:var(--ink)}button.g{background:var(--gold);border-color:var(--gold)}button.r{background:var(--red);color:#fff;border-color:var(--red)}
+header button{min-height:44px;background:#2B456A;border-color:#3E5B86;color:#fff}
+#x{width:46px;padding:0;font-size:22px;background:var(--red);border-color:var(--red)}
+input{width:100%;min-height:48px;border:1.5px solid var(--line);border-radius:12px;padding:0 14px;background:#fff;color:var(--ink)}
+main{max-width:720px;margin:0 auto;padding:16px;display:flex;flex-direction:column;gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.msg{min-height:1.4em;color:var(--red);font-size:15px}.ok{color:#1c7a3e}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:300px;margin:0 auto;direction:ltr}
+.pad button{min-height:64px;font-size:26px}
+.dots{display:flex;gap:12px;justify-content:center;direction:ltr;min-height:22px}
+.dots i{width:18px;height:18px;border-radius:50%;border:2px solid var(--ink)}.dots i.f{background:var(--ink)}
+.bar{height:10px;background:#E8E3D2;border-radius:5px;overflow:hidden}.bar i{display:block;height:100%;background:#B88A2A}
+.off{opacity:.55}code{background:#EFEADA;padding:1px 6px;border-radius:6px;direction:ltr;unicode-bidi:embed}
+small{color:var(--mut)}
+[hidden]{display:none!important}
+</style></head><body>
+<header><h1>ניהול משתמשים</h1><button id="rf" hidden aria-label="רענון">רענון</button><button id="mn" hidden aria-label="תפריט">⋯</button><button id="x" aria-label="יציאה מהאפליקציה">✕</button></header>
+<main>
+<section id="setup" class="card" hidden>
+<b style="font-size:20px">הגדרה ראשונה</b>
+<small>הסיסמה של השרת נשמרת במכשיר הזה בלבד, מוצפנת בקוד קצר שתבחר. בכל כניסה תקליד רק את הקוד הקצר.</small>
+<label>סיסמת מנהל של השרת<input id="k" type="password" dir="ltr" autocomplete="off"></label>
+<label>קוד כניסה קצר (4 עד 8 ספרות)<input id="p1" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" dir="ltr" autocomplete="off"></label>
+<label>אותו קוד שוב<input id="p2" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" dir="ltr" autocomplete="off"></label>
+<button class="p" id="sv">שמירה והתחלה</button><div id="sm" class="msg"></div>
+</section>
+<section id="lock" class="card" hidden>
+<b style="font-size:20px;text-align:center">הקלידו את קוד הכניסה</b>
+<div class="dots" id="dots"></div><div id="lm" class="msg" style="text-align:center"></div>
+<div class="pad" id="pad"></div>
+</section>
+<section id="app" hidden>
+<div id="st" class="msg" style="text-align:center"></div>
+<div class="card"><button class="g" id="nw">＋ משתמש חדש / עדכון</button>
+<div id="form" hidden style="display:flex;flex-direction:column;gap:8px"><input id="c" dir="ltr" placeholder="קוד (ריק = ייווצר אוטומטית)" autocapitalize="characters"><input id="n" placeholder="שם"><div class="row"><input id="q" type="number" step="0.5" min="0" value="3" style="width:110px" aria-label="מכסה חודשית"><span>$ לחודש</span><button class="p" id="sa" style="margin-inline-start:auto">שמירה</button></div></div></div>
+<div id="list" style="display:flex;flex-direction:column;gap:12px"></div>
+<small>זמן הפעילות הוא הערכה לפי פעולות מול השרת. הנתונים מתעדכנים בהשהיה של עד חצי דקה.</small>
+</section>
+</main>
+<script>
+const URL_API='https://english-tutor-api.27levyam.workers.dev';
+const $=i=>document.getElementById(i),LS='adm1';
+let KEY='',PIN='',busy=false;
+const te=new TextEncoder(),td=new TextDecoder();
+const b2s=b=>btoa(String.fromCharCode(...new Uint8Array(b))),s2b=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+async function dkey(pin,salt){const m=await crypto.subtle.importKey('raw',te.encode(pin),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:250000,hash:'SHA-256'},m,{name:'AES-GCM',length:256},false,['encrypt','decrypt'])}
+async function enc(pin,txt){const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));const k=await dkey(pin,salt);const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},k,te.encode(txt));return {s:b2s(salt),i:b2s(iv),c:b2s(ct),n:pin.length}}
+async function dec(pin,o){const k=await dkey(pin,s2b(o.s));return td.decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:s2b(o.i)},k,s2b(o.c)))}
+const get=()=>{try{return JSON.parse(localStorage.getItem(LS))}catch(e){return null}};
+const put=o=>{try{localStorage.setItem(LS,JSON.stringify(o))}catch(e){}};
+try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
+async function api(p,b){const r=await fetch(URL_API+p,{method:b?'POST':'GET',headers:{Authorization:'Bearer '+KEY,'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined});let j={};try{j=await r.json()}catch(e){}if(!r.ok)throw new Error(r.status===401||r.status===403?'סיסמת המנהל לא נכונה':(j.error||'שגיאה '+r.status));return j}
+function show(id){['setup','lock','app'].forEach(s=>$(s).hidden=s!==id);$('rf').hidden=$('mn').hidden=id!=='app'}
+/* exit */
+function exitApp(){
+  try{const C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.App){C.Plugins.App.exitApp();return}}catch(e){}
+  try{if(navigator.app&&navigator.app.exitApp){navigator.app.exitApp();return}}catch(e){}
+  try{if(window.AndroidBridge&&window.AndroidBridge.exit){window.AndroidBridge.exit();return}}catch(e){}
+  KEY='';PIN='';window.close();
+  setTimeout(()=>{document.body.innerHTML='<main><div class="card" style="text-align:center"><b>אפשר לסגור את האפליקציה</b><small>לחצו על כפתור הבית של הטלפון.</small></div></main>'},300);
+}
+$('x').onclick=exitApp;
+/* setup */
+$('sv').onclick=async()=>{
+  const k=$('k').value.trim(),a=$('p1').value,b=$('p2').value,m=$('sm');m.textContent='';
+  if(!k){m.textContent='חסרה סיסמת מנהל';return}
+  if(!/^\d{4,8}$/.test(a)){m.textContent='הקוד הקצר צריך להיות 4 עד 8 ספרות';return}
+  if(a!==b){m.textContent='שני הקודים לא זהים';return}
+  $('sv').disabled=true;m.textContent='בודק מול השרת...';m.className='msg ok';
+  try{KEY=k;await api('/admin/list');put({v:await enc(a,k),f:0,t:0});PIN=a;$('k').value=$('p1').value=$('p2').value='';await start()}
+  catch(e){KEY='';m.className='msg';m.textContent=e.message==='Failed to fetch'?'אין חיבור לשרת':e.message}
+  $('sv').disabled=false;
+};
+/* lock */
+let typed='';
+function dots(){const n=(get()||{v:{n:4}}).v.n;$('dots').innerHTML='';for(let i=0;i<n;i++){const d=document.createElement('i');if(i<typed.length)d.className='f';$('dots').append(d)}}
+(function(){const p=$('pad');['1','2','3','4','5','6','7','8','9','⌫','0','✓'].forEach(k=>{const b=document.createElement('button');b.textContent=k;b.onclick=()=>press(k);p.append(b)})})();
+document.addEventListener('keydown',e=>{if($('lock').hidden)return;if(/^\d$/.test(e.key))press(e.key);else if(e.key==='Backspace')press('⌫')});
+async function press(k){
+  if(busy)return;const o=get();if(!o)return;
+  if(k==='⌫'){typed=typed.slice(0,-1);dots();return}
+  if(k==='✓'){if(typed.length>=4)tryPin();return}
+  if(typed.length<8)typed+=k;dots();
+  if(typed.length===o.v.n)tryPin();
+}
+async function tryPin(){
+  const o=get();const now=Date.now();
+  if(o.t&&now<o.t){$('lm').textContent='נסו שוב בעוד '+Math.ceil((o.t-now)/1000)+' שניות';typed='';dots();return}
+  busy=true;$('lm').textContent='';
+  try{KEY=await dec(typed,o.v);PIN=typed;o.f=0;o.t=0;put(o);typed='';busy=false;await start()}
+  catch(e){o.f=(o.f||0)+1;if(o.f>=5){o.t=Date.now()+30000*Math.min(o.f-4,10)}put(o);typed='';dots();$('lm').textContent=o.f>=5?'יותר מדי ניסיונות. נסו שוב בעוד חצי דקה':'הקוד לא נכון';busy=false}
+}
+/* app */
+const esc=x=>String(x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function dur(s){s=Math.round(s||0);const h=Math.floor(s/3600),m=Math.round(s%3600/60);return h?h+' שעות ו-'+m+' דק׳':m+' דק׳'}
+function ago(t){const m=Math.round((Date.now()-t)/6e4);return m<2?'ממש עכשיו':m<60?'לפני '+m+' דק׳':m<1440?'לפני '+Math.round(m/60)+' שעות':'לפני '+Math.round(m/1440)+' ימים'}
+function gen(){const a='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let s='';for(let i=0;i<8;i++){s+=a[Math.floor(Math.random()*a.length)];if(i==3)s+='-'}return s}
+async function start(){show('app');$('st').className='msg ok';await load()}
+async function load(){
+  $('st').className='msg ok';$('st').textContent='מתחבר ומרענן...';
+  try{
+    const j=await api('/admin/list'),L=$('list');L.replaceChildren();
+    if(!j.users.length){L.innerHTML='<div class="card">אין משתמשים עדיין</div>'}
+    j.users.forEach(u=>{
+      const p=u.quota?Math.min(100,u.used/u.quota*100):100,c=u.calls||{},d=document.createElement('div');d.className='card'+(u.disabled?' off':'');
+      d.innerHTML='<div class="row"><b style="font-size:19px">'+esc(u.name||'ללא שם')+'</b><code style="margin-inline-start:auto">'+esc(u.code)+'</code></div>'+
+      '<div>'+(u.last?'נראה '+ago(u.last):'עוד לא התחבר')+' · '+(u.sessions||0)+' כניסות · '+dur(u.active)+'</div>'+
+      '<small>שיחה '+(c.chat||0)+' · דיבור '+(c.stt||0)+' · הקראה '+(c.tts||0)+'</small>'+
+      '<div class="bar"><i style="width:'+p+'%"></i></div><div>$'+u.used.toFixed(3)+' מתוך $'+u.quota+' <small>(סה"כ מאז ההתחלה: $'+(u.total||0).toFixed(2)+')</small></div>';
+      const r=document.createElement('div');r.className='row';
+      const mk=(t,cls,fn)=>{const b=document.createElement('button');b.textContent=t;if(cls)b.className=cls;b.onclick=fn;r.append(b)};
+      mk('עריכה','',()=>{$('form').hidden=false;$('c').value=u.code;$('n').value=u.name||'';$('q').value=u.quota;scrollTo(0,0)});
+      mk('איפוס חודש','',()=>act(u.code,{resetUsed:true}));
+      mk(u.disabled?'הפעלה':'השהיה','',()=>act(u.code,{disabled:!u.disabled}));
+      mk('מחיקה','r',()=>del(u.code,u.name));
+      d.append(r);L.append(d);
+    });
+    $('st').textContent='';
+  }catch(e){$('st').className='msg';$('st').textContent=e.message==='Failed to fetch'?'אין חיבור לשרת. בדקו אינטרנט ונסו שוב (רענון).':e.message}
+}
+async function act(c,o){try{await api('/admin/set',{code:c,...o});load()}catch(e){$('st').className='msg';$('st').textContent=e.message}}
+async function del(c,n){if(confirm('למחוק את '+(n||c)+'?')){try{await api('/admin/del',{code:c});load()}catch(e){$('st').textContent=e.message}}}
+$('form').hidden=true;
+$('nw').onclick=()=>{$('form').hidden=!$('form').hidden};
+$('sa').onclick=async()=>{try{const c=$('c').value.trim()||gen();await api('/admin/set',{code:c,name:$('n').value,quota:+$('q').value});$('c').value=$('n').value='';$('form').hidden=true;await load();$('st').className='msg ok';$('st').textContent='נשמר. הקוד: '+c.toUpperCase()}catch(e){$('st').className='msg';$('st').textContent=e.message}};
+$('rf').onclick=load;
+$('mn').onclick=()=>{
+  const a=prompt('1 = החלפת קוד הכניסה הקצר\n2 = מחיקת הסיסמה השמורה מהמכשיר (תידרש הגדרה מחדש)\nהקלידו מספר:');
+  if(a==='2'){if(confirm('למחוק את הסיסמה השמורה?')){localStorage.removeItem(LS);KEY=PIN='';location.reload()}}
+  else if(a==='1'){const n=prompt('קוד חדש (4 עד 8 ספרות):');if(n&&/^\d{4,8}$/.test(n)){enc(n,KEY).then(v=>{put({v,f:0,t:0});alert('הקוד הוחלף')})}else if(n)alert('הקוד צריך להיות 4 עד 8 ספרות')}
+};
+/* boot */
+(function(){if(get()){show('lock');dots()}else show('setup')})();
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&!$('app').hidden){KEY='';PIN='';typed='';show('lock');dots()}});
+</script></body></html>
