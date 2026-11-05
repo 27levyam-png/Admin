@@ -1,0 +1,56 @@
+name: Build APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore: ['README*']
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Prepare web files
+        run: |
+          mkdir -p www
+          cp index.html manifest.webmanifest www/
+          cp -r icons www/icons
+      - name: Create Capacitor project
+        run: |
+          npm init -y
+          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 @capacitor/app@6
+          npx cap init "English Admin" com.levy.englishadmin --web-dir www
+          npx cap add android
+          npx cap sync android
+      - name: App icon and name
+        run: |
+          RES=android/app/src/main/res
+          rm -rf $RES/mipmap-anydpi-v26
+          for d in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
+            n=${d%%:*}; s=${d##*:}
+            convert icons/icon-512.png -resize ${s}x${s} $RES/mipmap-$n/ic_launcher.png
+            convert icons/icon-512.png -resize ${s}x${s} $RES/mipmap-$n/ic_launcher_round.png
+            rm -f $RES/mipmap-$n/ic_launcher_foreground.png
+          done
+          sed -i 's#<string name="app_name">.*</string>#<string name="app_name">English to speak</string>#; s#<string name="title_activity_main">.*</string>#<string name="title_activity_main">English to speak</string>#' $RES/values/strings.xml
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+      - name: Publish to Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk english-admin.apk
+          gh release create "apk-${{ github.run_number }}" english-admin.apk --title "APK ${{ github.run_number }}" --notes "Debug APK" --latest
