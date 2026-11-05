@@ -45,7 +45,13 @@ jobs:
           sed -i 's#<string name="app_name">.*</string>#<string name="app_name">English to speak</string>#; s#<string name="title_activity_main">.*</string>#<string name="title_activity_main">English to speak</string>#' $RES/values/strings.xml
       - name: Build debug APK
         working-directory: android
-        run: ./gradlew assembleDebug
+        run: |
+          sed -i 's/networkTimeout=.*/networkTimeout=180000/' gradle/wrapper/gradle-wrapper.properties
+          for i in 1 2 3; do
+            ./gradlew assembleDebug --no-daemon && exit 0
+            echo "Attempt $i failed, retrying in 15s"; sleep 15
+          done
+          exit 1
       - uses: actions/upload-artifact@v4
         with:
           name: app-debug
