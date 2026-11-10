@@ -43,6 +43,16 @@ jobs:
             rm -f $RES/mipmap-$n/ic_launcher_foreground.png
           done
           sed -i 's#<string name="app_name">.*</string>#<string name="app_name">English to speak</string>#; s#<string name="title_activity_main">.*</string>#<string name="title_activity_main">English to speak</string>#' $RES/values/strings.xml
+      - name: Stable signing key and version
+        run: |
+          mkdir -p ~/.android
+          cp signing/debug.keystore ~/.android/debug.keystore
+          V=$(grep -o "ADMIN_VERSION='[0-9.]*'" index.html | grep -o "[0-9][0-9.]*" | head -1)
+          CODE=$(echo "$V" | awk -F. '{print $1*100+$2*10+$3}')
+          echo "version $V code $CODE"
+          sed -i "s/versionCode 1/versionCode $CODE/; s/versionName \"1.0\"/versionName \"$V\"/" android/app/build.gradle
+          grep -n "versionCode\|versionName" android/app/build.gradle
+          grep -q "versionCode $CODE" android/app/build.gradle
       - name: Build debug APK
         working-directory: android
         run: |
@@ -61,4 +71,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cp android/app/build/outputs/apk/debug/app-debug.apk english-admin.apk
-          gh release create "apk-${{ github.run_number }}" english-admin.apk --title "APK ${{ github.run_number }}" --notes "Debug APK" --latest
+          gh release create "apk-${{ github.run_number }}" english-admin.apk --title "ניהול משתמשים $(grep -o "ADMIN_VERSION='[0-9.]*'" index.html | grep -o "[0-9][0-9.]*" | head -1)" --notes "Debug APK" --latest
